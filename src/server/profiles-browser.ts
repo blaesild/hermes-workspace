@@ -27,16 +27,41 @@ export type ProfileDetail = {
   skillsDir?: string
 }
 
+const PROFILE_NAME_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/
+const TEXT_REWRITE_EXTENSIONS = new Set([
+  '.md',
+  '.txt',
+  '.yaml',
+  '.yml',
+  '.json',
+  '.jsonl',
+  '.toml',
+  '.env',
+  '.plist',
+  '.sh',
+  '.js',
+  '.ts',
+  '.tsx',
+])
+
 function getHermesRoot(): string {
-  return path.join(os.homedir(), '.hermes')
+  return (
+    process.env.HERMES_HOME ??
+    process.env.CLAUDE_HOME ??
+    path.join(os.homedir(), '.hermes')
+  )
+}
+
+function getClaudeRoot(): string {
+  return getHermesRoot()
 }
 
 export function getProfilesRoot(): string {
-  return path.join(getHermesRoot(), 'profiles')
+  return path.join(getClaudeRoot(), 'profiles')
 }
 
 function getActiveProfilePath(): string {
-  return path.join(getHermesRoot(), 'active_profile')
+  return path.join(getClaudeRoot(), 'active_profile')
 }
 
 /**
@@ -74,9 +99,10 @@ function safeReadText(filePath: string): string {
 function readYamlConfig(configPath: string): Record<string, unknown> {
   if (!fs.existsSync(configPath)) return {}
   try {
-    return (
-      (YAML.parse(safeReadText(configPath)) as Record<string, unknown>) || {}
-    )
+    const parsed = YAML.parse(safeReadText(configPath)) as unknown
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {}
   } catch {
     return {}
   }
@@ -148,9 +174,16 @@ export function listProfiles(): Array<ProfileSummary> {
     }
 
     for (const entry of entries) {
-      if (!entry.isDirectory()) continue
       const name = entry.name
       const profilePath = path.join(profilesRoot, name)
+      if (!entry.isDirectory()) {
+        if (!entry.isSymbolicLink()) continue
+        try {
+          if (!fs.statSync(profilePath).isDirectory()) continue
+        } catch {
+          continue
+        }
+      }
       const configPath = path.join(profilePath, 'config.yaml')
       const envPath = path.join(profilePath, '.env')
       const skillsDir = path.join(profilePath, 'skills')
@@ -201,7 +234,7 @@ export function listProfiles(): Array<ProfileSummary> {
     }
   }
 
-  const root = getHermesRoot()
+  const root = getClaudeRoot()
   const config = readYamlConfig(path.join(root, 'config.yaml'))
   // Resolve model/provider for default profile too
   let defaultModel: string | undefined
@@ -251,7 +284,7 @@ export function readProfile(name: string): ProfileDetail {
   const normalized = name.trim() || 'default'
   const profilePath =
     normalized === 'default'
-      ? getHermesRoot()
+      ? getClaudeRoot()
       : path.join(getProfilesRoot(), validateProfileName(normalized))
   if (!fs.existsSync(profilePath)) throw new Error('Profile not found')
   const configPath = path.join(profilePath, 'config.yaml')
@@ -282,11 +315,10 @@ export function setActiveProfile(name: string): void {
   const normalized = validateProfileName(trimmed)
   const profilePath = path.join(getProfilesRoot(), normalized)
   if (!fs.existsSync(profilePath)) throw new Error('Profile not found')
-  fs.mkdirSync(getHermesRoot(), { recursive: true })
+  fs.mkdirSync(getClaudeRoot(), { recursive: true })
   fs.writeFileSync(getActiveProfilePath(), `${normalized}\n`, 'utf-8')
-  // eslint-disable-next-line no-console
   console.warn(
-    `[profiles] Active profile set to "${normalized}". Restart the Hermes gateway for this profile switch to take effect.`,
+    `[profiles] Active profile set to "${normalized}". Restart the Hermes Agent gateway for this profile switch to take effect.`,
   )
 }
 
@@ -307,7 +339,7 @@ export function createProfile(
     // The 'default' profile lives at ~/.hermes, not ~/.hermes/profiles/default
     const sourceRoot =
       sourceName === 'default'
-        ? getHermesRoot()
+        ? getClaudeRoot()
         : path.join(getProfilesRoot(), sourceName)
     const sourceConfigPath = path.join(sourceRoot, 'config.yaml')
     if (fs.existsSync(sourceConfigPath)) {
@@ -348,7 +380,7 @@ export function deleteProfile(name: string): void {
     throw new Error('Cannot delete the active profile')
   const profilePath = path.join(getProfilesRoot(), normalized)
   if (!fs.existsSync(profilePath)) throw new Error('Profile not found')
-  const trashDir = path.join(getHermesRoot(), 'trash')
+  const trashDir = path.join(getClaudeRoot(), 'trash')
   fs.mkdirSync(trashDir, { recursive: true })
   const trashName = `${normalized}-${Date.now()}`
   fs.renameSync(profilePath, path.join(trashDir, trashName))
@@ -361,13 +393,13 @@ export function updateProfileConfig(
   const normalized = name.trim() || 'default'
   const profilePath =
     normalized === 'default'
-      ? getHermesRoot()
+      ? getClaudeRoot()
       : path.join(getProfilesRoot(), validateProfileName(normalized))
   if (!fs.existsSync(profilePath)) throw new Error('Profile not found')
   const configPath = path.join(profilePath, 'config.yaml')
   const current = readYamlConfig(configPath)
 
-  // Deep merge helper (same logic as hermes-config.ts)
+  // Deep merge helper (same logic as claude-config.ts)
   function deepMerge(
     target: Record<string, unknown>,
     source: Record<string, unknown>,

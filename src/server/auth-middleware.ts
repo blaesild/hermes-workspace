@@ -24,7 +24,7 @@ interface SessionStore {
 }
 
 const STORE_FILE = join(
-  process.env.HERMES_HOME ?? join(homedir(), '.hermes'),
+  process.env.HERMES_HOME ?? process.env.CLAUDE_HOME ?? join(homedir(), '.hermes'),
   'workspace-sessions.json',
 )
 const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
@@ -138,19 +138,31 @@ export function revokeSessionToken(token: string): void {
 }
 
 /**
+ * Resolve the configured workspace password.
+ *
+ * Honors HERMES_PASSWORD first (current name, post-rename) and falls back to
+ * CLAUDE_PASSWORD for back-compat with deployments configured pre-rename.
+ */
+function getConfiguredPassword(): string {
+  const fromHermes = process.env.HERMES_PASSWORD
+  if (fromHermes && fromHermes.length > 0) return fromHermes
+  const fromClaude = process.env.CLAUDE_PASSWORD
+  if (fromClaude && fromClaude.length > 0) return fromClaude
+  return ''
+}
+
+/**
  * Check if password protection is enabled.
  */
 export function isPasswordProtectionEnabled(): boolean {
-  return Boolean(
-    process.env.HERMES_PASSWORD && process.env.HERMES_PASSWORD.length > 0,
-  )
+  return getConfiguredPassword().length > 0
 }
 
 /**
  * Verify password using timing-safe comparison.
  */
 export function verifyPassword(password: string): boolean {
-  const configured = process.env.HERMES_PASSWORD
+  const configured = getConfiguredPassword()
   if (!configured || configured.length === 0) {
     return false
   }
@@ -181,8 +193,8 @@ export function getSessionTokenFromCookie(
 
   const cookies = cookieHeader.split(';').map((c) => c.trim())
   for (const cookie of cookies) {
-    if (cookie.startsWith('hermes-auth=')) {
-      return cookie.substring('hermes-auth='.length)
+    if (cookie.startsWith('claude-auth=')) {
+      return cookie.substring('claude-auth='.length)
     }
   }
   return null
@@ -292,5 +304,5 @@ export function createSessionCookie(token: string): string {
   const attrs = ['HttpOnly']
   if (shouldSetSecureCookie()) attrs.push('Secure')
   attrs.push('SameSite=Strict', 'Path=/', `Max-Age=${30 * 24 * 60 * 60}`)
-  return `hermes-auth=${token}; ${attrs.join('; ')}`
+  return `claude-auth=${token}; ${attrs.join('; ')}`
 }

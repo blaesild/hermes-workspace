@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils'
 
 export type SettingsNavId =
   | 'connection'
-  | 'hermes'
+  | 'claude'
   | 'agent'
   | 'routing'
   | 'voice'
@@ -11,14 +11,13 @@ export type SettingsNavId =
   | 'appearance'
   | 'chat'
   | 'notifications'
-  | 'mcp'
   | 'language'
 
 type NavItem = { id: SettingsNavId; label: string }
 
 export const SETTINGS_NAV_ITEMS: Array<NavItem> = [
   { id: 'connection', label: 'Connection' },
-  { id: 'hermes', label: 'Model & Provider' },
+  { id: 'claude', label: 'Model & Provider' },
   { id: 'agent', label: 'Agent Behavior' },
   { id: 'routing', label: 'Smart Routing' },
   { id: 'voice', label: 'Voice' },
@@ -26,7 +25,6 @@ export const SETTINGS_NAV_ITEMS: Array<NavItem> = [
   { id: 'appearance', label: 'Appearance' },
   { id: 'chat', label: 'Chat' },
   { id: 'notifications', label: 'Notifications' },
-  { id: 'mcp', label: 'MCP Servers' },
   { id: 'language', label: 'Language' },
 ]
 
@@ -55,13 +53,6 @@ function renderItem({
       {item.label}
     </>
   )
-  if (item.id === 'mcp') {
-    return (
-      <Link key={item.id} to="/settings/mcp" className={className}>
-        {content}
-      </Link>
-    )
-  }
   return (
     <Link
       key={item.id}
@@ -121,13 +112,6 @@ export function SettingsMobilePills({ activeId }: { activeId: SettingsNavId }) {
           'shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors',
           isActive ? activeClass : inactiveClass,
         )
-        if (item.id === 'mcp') {
-          return (
-            <Link key={item.id} to="/settings/mcp" className={className}>
-              {item.label}
-            </Link>
-          )
-        }
         return (
           <Link
             key={item.id}
