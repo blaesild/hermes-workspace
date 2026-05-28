@@ -17,7 +17,12 @@ WORKDIR /app
 
 # Install deps (cache-friendly: copy only manifests first)
 COPY package.json pnpm-lock.yaml* ./
-RUN pnpm install --frozen-lockfile
+# --ignore-scripts: skip postinstall scripts entirely. None of them are needed
+# for the server-only `pnpm build` path (esbuild's native binary is bundled in
+# the npm package; electron-* scripts are no-ops on headless Linux). pnpm v10
+# would otherwise fail with ERR_PNPM_IGNORED_BUILDS unless every flagged pkg
+# is explicitly approved.
+RUN pnpm install --frozen-lockfile --ignore-scripts
 
 # Copy sources and build
 COPY . .
